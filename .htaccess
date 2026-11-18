@@ -1,0 +1,8 @@
+# Apache 2.4+: hide dotfiles (.env, .git, .htaccess) and disable directory listings
+Options -Indexes
+
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+RedirectMatch 404 /\.git(/|$)

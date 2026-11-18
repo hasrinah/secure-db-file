@@ -1,0 +1,16 @@
+# Secrets
+.env
+
+# Runtime data: uploaded files, encrypted files, keys and integrity files
+uploads/*
+secure/*
+integrity/*
+!uploads/.htaccess
+!secure/.htaccess
+!integrity/.htaccess
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,52 +1,62 @@
 <?php
+require __DIR__ . '/auth.php';
+require_login();
+
 // Include the Md5Processor and AesEncryption classes
 include('Md5Processor.php');
 include('AesEncryption.php');
 
-// Define the upload directory and the secure directory
-$uploadDir = 'uploads/';
-$secureDir = 'secure/';
+const MAX_UPLOAD_BYTES   = 20 * 1024 * 1024; // 20 MB
+const ALLOWED_EXTENSIONS = ['unl', 'txt'];
 
-// Initialize message variable to avoid undefined warnings
+// Initialize message variables to avoid undefined warnings
 $message = '';
-
+$isError = false;
 
 // Check if the form is submitted
 if (isset($_POST['submit'])) {
-    // Initialize message variable
-    $message = '';
+    $uploadedFile = $_FILES['fileUpload'] ?? null;
 
-    // Get the uploaded file details
-    $uploadedFile = $_FILES['fileUpload'];
-
-    // Check for file upload errors
-    if ($uploadedFile['error'] === UPLOAD_ERR_OK) {
-        $originalFileName = basename($uploadedFile['name']);
-        $targetFilePath = $uploadDir . $originalFileName;
-
-        // Move the uploaded file to the uploads directory
-        if (move_uploaded_file($uploadedFile['tmp_name'], $targetFilePath)) {
-            // Create an instance of the Md5Processor class
-            $md5Processor = new Md5Processor();
-            // Process the file for MD5 and integrity generation
-            $integrityFileName = $md5Processor->processFile($targetFilePath, 'integrity/');
-
-            // Create an instance of the AesEncryption class
-            $aesEncryption = new AesEncryption();
-
-            // Process the file for encryption and export the encrypted data
-            $encryptedFileName = $aesEncryption->encryptFile($targetFilePath, $secureDir);
-
-            // Build a user-friendly success message
-            $message  = 'File processed successfully!<br>';
-            $message .= 'Integrity file created: ' . htmlspecialchars($integrityFileName) . '<br>';
-            $message .= 'Encrypted file created: ' . htmlspecialchars($encryptedFileName);
-
-        } else {
-            $message = 'File upload failed.';
-        }
-    } else {
+    if (!check_csrf()) {
+        $message = 'Your session has expired. Please reload the page and try again.';
+        $isError = true;
+    } elseif (!$uploadedFile || $uploadedFile['error'] !== UPLOAD_ERR_OK) {
         $message = 'Error uploading file. Please try again.';
+        $isError = true;
+    } elseif ($uploadedFile['size'] > MAX_UPLOAD_BYTES) {
+        $message = 'File is too large (max 20 MB).';
+        $isError = true;
+    } else {
+        // Keep only safe characters in the file name
+        $originalFileName = preg_replace('/[^A-Za-z0-9._-]/', '_', basename($uploadedFile['name']));
+        $extension = strtolower(pathinfo($originalFileName, PATHINFO_EXTENSION));
+
+        if (!in_array($extension, ALLOWED_EXTENSIONS, true)) {
+            $message = 'Only .unl and .txt files are accepted.';
+            $isError = true;
+        } else {
+            $targetFilePath = UPLOAD_DIR . $originalFileName;
+
+            // Move the uploaded file to the uploads directory
+            if (move_uploaded_file($uploadedFile['tmp_name'], $targetFilePath)) {
+                try {
+                    // Generate the MD5 integrity file, then the encrypted copy
+                    $integrityFileName = (new Md5Processor())->processFile($targetFilePath, INTEGRITY_DIR);
+                    $encryptedFileName = (new AesEncryption())->encryptFile($targetFilePath, SECURE_DIR);
+
+                    // Build a user-friendly success message
+                    $message  = 'File processed successfully!<br>';
+                    $message .= 'Integrity file created: ' . htmlspecialchars(basename($integrityFileName)) . '<br>';
+                    $message .= 'Encrypted file created: ' . htmlspecialchars(basename($encryptedFileName));
+                } finally {
+                    // Never keep the plaintext copy once it has been processed
+                    unlink($targetFilePath);
+                }
+            } else {
+                $message = 'File upload failed.';
+                $isError = true;
+            }
+        }
     }
 }
 ?>
@@ -63,16 +73,17 @@ if (isset($_POST['submit'])) {
     <div class="container">
         <h2>Upload File</h2>
         <?php if (!empty($message)): ?>
-            <div class="message"><?php echo $message; ?></div>
+            <div class="<?php echo $isError ? 'error' : 'message'; ?>"><?php echo $message; ?></div>
         <?php endif; ?>
         <form action="" method="POST" enctype="multipart/form-data">
-            <label for="fileUpload">Choose a file</label>
-            <input type="file" name="fileUpload" id="fileUpload" required>
+            <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+            <label for="fileUpload">Choose a pipe-delimited .unl or .txt file</label>
+            <input type="file" name="fileUpload" id="fileUpload" accept=".unl,.txt" required>
             <button type="submit" name="submit">Upload</button>
         </form>
 
-        <!-- Navigation link to the login page -->
-        <a href="login.php" class="link-button">Go to Login</a>
+        <!-- Navigation link to the file list -->
+        <a href="login.php" class="link-button">View encrypted files</a>
     </div>
 </body>
 </html>

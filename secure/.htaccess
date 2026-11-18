@@ -1,0 +1,2 @@
+# Never serve these files directly over HTTP (Apache 2.4+)
+Require all denied

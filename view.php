@@ -1,18 +1,23 @@
-<?php 
+<?php
+require __DIR__ . '/auth.php';
+require_login();
+
 // Include the Decrypt class
 include('AesDecryption.php');
 
-// Get the selected file
-$filePath = $_GET['file'] ?? '';
+// Only accept the name of an existing .dbfile inside the secure directory
+$filePath = resolve_dbfile($_GET['file'] ?? '');
+$rows = [];
+$error = null;
 
-if ($filePath && file_exists($filePath)) {
-    // Create an instance of AesDecryption
-    $aesDecryption = new AesDecryption();
-
-    // Decrypt the file
-    $rows = $aesDecryption->decryptFile($filePath, 'secure/AES.KEY');
+if ($filePath === null) {
+    $error = 'File not found.';
 } else {
-    $rows = [];
+    $rows = (new AesDecryption())->decryptFile($filePath, KEY_FILE);
+    if ($rows === false) {
+        $error = 'This file could not be decrypted.';
+        $rows = [];
+    }
 }
 ?>
 
@@ -30,6 +35,10 @@ if ($filePath && file_exists($filePath)) {
 </head>
 <body>
     <h2>File Viewer</h2>
+    <p><a href="login.php">&larr; Back to files</a></p>
+    <?php if ($error): ?>
+        <p class="error"><?php echo htmlspecialchars($error); ?></p>
+    <?php endif; ?>
     <table id="fileDataTable" class="display">
             <thead>
                 <tr>
@@ -58,7 +67,7 @@ if ($filePath && file_exists($filePath)) {
                         <td><?php echo $index++; ?></td>  <!-- Display numbering in the first column -->
                         <?php foreach ($row as $key => $column): ?>
                             <?php if ($key > 0): ?> <!-- Skip the first column since it’s for numbering -->
-                                <td><?php echo htmlspecialchars($column); ?></td>
+                                <td><?php echo htmlspecialchars((string) $column); ?></td>
                             <?php endif; ?>
                         <?php endforeach; ?>
                     </tr>
